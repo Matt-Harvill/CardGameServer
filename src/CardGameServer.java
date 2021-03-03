@@ -182,6 +182,7 @@ public class CardGameServer {
         private final int playerOrder;
         private Card sentCard;
         private List<Card> initialDeck;
+        private boolean myTurn;
 
         public Player(Socket s) {
             displayJoinedGame = false;
@@ -189,6 +190,7 @@ public class CardGameServer {
             socket = s;
             playerOrder = numPlayers;
             initialDeck = new ArrayList<>();
+            myTurn = false;
 
             try {
                 dataIn = new ObjectInputStream(socket.getInputStream());
@@ -207,6 +209,7 @@ public class CardGameServer {
                 sendNextInstruction(nextInstruction);
                 sendPlayerName();
                 sendGameStatus();
+                sendTurnStatus();
                 if(nextInstruction==Instruction.BEGINCHAT) {
                 } else if(nextInstruction==Instruction.DEALCARDS) {
                     sendDeck();
@@ -218,6 +221,10 @@ public class CardGameServer {
             }
         }
 
+        public void sendTurnStatus() throws IOException {
+            dataOut.writeBoolean(myTurn);
+            dataOut.flush();
+        }
         public void sendGameStatus() throws IOException {
             dataOut.writeBoolean(gameOver);
             dataOut.flush();
@@ -241,7 +248,10 @@ public class CardGameServer {
 
         public void run() {
             try {
-                if(playerOrder==1) playerCompletingTurn = playerName;
+                if(playerOrder==1) {
+                    playerCompletingTurn = playerName;
+                    myTurn = true;
+                }
 
                 while (nextInstruction != Instruction.LEAVE) {
                     Instruction tempInstruction = getNextInstruction();
@@ -249,7 +259,7 @@ public class CardGameServer {
                         lock.lock();
                         nextInstruction = tempInstruction;
                         currentPlayerName = playerName;
-                        if (nextInstruction == Instruction.MESSAGE /*|| nextInstruction==Instruction.GAMEMESSAGE*/) {
+                        if (nextInstruction == Instruction.MESSAGE || nextInstruction==Instruction.GAMEMESSAGE) {
                             String s = receiveMessage();
                             System.out.println(playerName + ": " + s);
                             messageSent = (playerName + ": " + s);

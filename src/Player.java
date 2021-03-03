@@ -7,6 +7,7 @@ import javafx.stage.Stage;
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Scanner;
 
@@ -38,7 +39,8 @@ public class Player extends Application {
     private static Receiver receiver;
     private static String actionPlayerName;
     private static Socket socket;
-    private static Thread senderThread;
+    private static Thread chatSenderThread;
+    private static Thread gameSenderThread;
     private static Thread receiverThread;
 
     public void start(Stage primaryStage) {
@@ -88,7 +90,7 @@ public class Player extends Application {
             try {
                 sender.sendNextInstruction(Instruction.LEAVE);
                 sender.closeConnection();
-                senderThread.stop();
+                chatSenderThread.stop();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -112,6 +114,7 @@ public class Player extends Application {
     private static boolean gameOver;
     private static boolean myTurn;
     private static boolean gameAreaDisabled;
+    private static Phase phase;
 
     public Player(String name) {
         gameArea = new TextArea();
@@ -140,6 +143,7 @@ public class Player extends Application {
         gameOver = false;
         myTurn = false;
         gameAreaDisabled = false;
+        phase = Phase.ACTION;
     }
 
     public static void gameOverStuff() {
@@ -157,66 +161,147 @@ public class Player extends Application {
         }
     }
 
-    public static class Sender implements Runnable {
+    public static class Sender {
 
         private ObjectOutputStream dataOut;
+        private GameSender gameSender;
+        private ChatSender chatSender;
 
         public Sender() {
             try {
                 dataOut = new ObjectOutputStream(socket.getOutputStream());
-                senderThread = new Thread(this);
-                senderThread.start();
-
+                gameSender = new GameSender();
+                chatSender = new ChatSender();
             } catch (IOException ex) {
                 System.out.println("IO Exception from sender constructor");
             }
         }
 
-        public void run() {
-            try {
-                sendNextInstruction(Instruction.DEALCARDS);
-                sendNextInstruction(Instruction.BEGINCHAT);
-                sendNextInstruction(Instruction.NAME);
-                sendMessage(name);
+        public class GameSender implements Runnable {
+            public GameSender() {
+                gameSenderThread = new Thread(this);
+                gameSenderThread.start();
+            }
 
-                String s = "";
-                while (!s.equals("leave")) {
-                    while (!gameTyped && !chatTyped) {
-                        if (gameOver && !gameAreaDisabled) {
-                            gameOverStuff();
-                        }
-                        Thread.sleep(50);
+            public void run() {
+                try {
+                    while (!gameAreaDisabled) {
+
+                        if (myTurn) {
+                            newTurn();
+                            gameArea.setText("Your hand:\n" + getHand() + "\nYou have " + getNumActions() + " action(s) remaining this turn\nWould you like to play an action card?");
+
+                            while (!gameTyped) {
+                                if (gameOver && !gameAreaDisabled) {
+                                    gameOverStuff();
+                                }
+                                Thread.sleep(50);
+                            }
+                            if (gameTyped) {
+                                gameTyped = false;
+                                String s = gameString;
+                                sendNextInstruction(Instruction.GAMEMESSAGE);
+                                sendMessage(s);
+                            }
+
+//                            System.out.println(hand);
+                            /*
+                            boolean cardWasPlayed = false;
+                            while (getNumActions() > 0) {
+                                if (true) {
+                                    System.out.println("What card do you want to play?");
+                                    for (Card card : getHand()) {
+                                        if (true) {
+                                            if (card.isActionCard()) {
+                                                performAction((ActionCard) card);
+                                                cardWasPlayed = true;
+                                                System.out.println("Action successfully performed\n");
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    if (!cardWasPlayed) {
+                                        System.out.println("No action performed\n");
+                                    }
+                                    cardWasPlayed = false;
+                                }
+                            }
+
+                            boolean cardWasPurchased;
+                            while (getNumBuys() > 0) {
+                                cardWasPurchased = false;
+                                System.out.println("You have " + getHandPurchasePower() + " coins to spend");
+                                System.out.println("You have " + getNumBuys() + " buy(s) remaining this turn");
+                                System.out.println("Would you like to buy a card?");
+                                if (true) {
+                                    System.out.println("What card do you want?");
+//                            for (List<Card> list : cardSupply) {
+//                                if (list.size()!=0 && list.get(0).getCardName().equals(scannerInput)) {
+//                                    if(buyCard(list.get(0),list)){
+//                                        cardWasPurchased = true;
+//                                        System.out.println("Purchase successful\n");
+//                                    }
+//                                    break;
+//                                }
+//                            }
+                                    if (!cardWasPurchased) {
+                                        System.out.println("Purchase failed, try again\n");
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            */
+                            discardHand();
+                        } else Thread.sleep(50);
                     }
-                    if (gameTyped) {
-                        gameTyped = false;
-//                        s = gameString;
-//                        if (s.contains("CN -")) {
-//                            sendNextInstruction(Instruction.GAMENAME);
-//                            s = s.substring(5);
-//                            sendMessage(s);
-//                        } else {
-//                            sendNextInstruction(Instruction.GAMEMESSAGE);
-//                            sendMessage(s);
-//                        }
-                    } else if (chatTyped) {
-                        chatTyped = false;
-                        s = chatString;
-                        if (s.contains("CN -")) {
-                            sendNextInstruction(Instruction.NAME);
-                            s = s.substring(5);
-                            sendMessage(s);
-                        } else if (s.equals("leave")) {
-                            sendNextInstruction(Instruction.LEAVE);
-                            break;
-                        } else {
-                            sendNextInstruction(Instruction.MESSAGE);
-                            sendMessage(s);
-                        }
-                    }
+                    gameArea.setText(null);
+                } catch (InterruptedException | IOException ex) {
+                    System.out.println("IOException at gameSender run()");
                 }
-                closeConnection();
-            } catch (IOException | InterruptedException ex) {
-                System.out.println("IOException at sender run()");
+            }
+        }
+
+        public class ChatSender implements Runnable {
+
+            public ChatSender() {
+                chatSenderThread = new Thread(this);
+                chatSenderThread.start();
+            }
+
+            public void run() {
+                try {
+                    sendNextInstruction(Instruction.DEALCARDS);
+                    sendNextInstruction(Instruction.BEGINCHAT);
+                    sendNextInstruction(Instruction.NAME);
+                    sendMessage(name);
+
+                    String s = "";
+                    while (!s.equals("leave")) {
+//
+                        while (!chatTyped) {
+                            Thread.sleep(50);
+                        }
+                        if (chatTyped) {
+                            chatTyped = false;
+                            s = chatString;
+                            if (s.contains("CN -")) {
+                                sendNextInstruction(Instruction.NAME);
+                                s = s.substring(5);
+                                sendMessage(s);
+                            } else if (s.equals("leave")) {
+                                sendNextInstruction(Instruction.LEAVE);
+                                break;
+                            } else {
+                                sendNextInstruction(Instruction.MESSAGE);
+                                sendMessage(s);
+                            }
+                        }
+                    }
+                    closeConnection();
+                } catch (IOException | InterruptedException ex) {
+                    System.out.println("IOException at sender run()");
+                }
             }
         }
 
@@ -255,6 +340,7 @@ public class Player extends Application {
                     Instruction nextInstruction = getNextInstruction();
                     actionPlayerName = receivePlayerName();
                     gameOver = receiveGameStatus();
+                    myTurn = receiveTurnStatus();
                     if (nextInstruction == Instruction.MESSAGE || nextInstruction == Instruction.NAME) {
                         chatString = (receiveMessage());
                         chatAreaStrings.add(chatString + "\n");
@@ -265,8 +351,8 @@ public class Player extends Application {
                         }
                         chatArea.setText(s.toString());
                     }
-//                    else if (nextInstruction == Instruction.GAMEMESSAGE || nextInstruction == Instruction.GAMENAME) {
-//                        gameString = (receiveMessage());
+                    else if (nextInstruction == Instruction.GAMEMESSAGE /*|| nextInstruction == Instruction.GAMENAME*/) {
+                        gameString = (receiveMessage());
 //                        gameAreaStrings.add(gameString + "\n");
 //                        String s = "";
 //                        if (gameAreaStrings.size() > 7) gameAreaStrings.remove(0);
@@ -274,7 +360,7 @@ public class Player extends Application {
 //                            s += string;
 //                        }
 //                        gameArea.setText(s);
-//                    }
+                    }
                     else if (nextInstruction == Instruction.BEGINCHAT){
                         chatAreaStrings.add("-----This is the Chat-----\ntype \"leave\" to exit the chat\ntype \"CN - \" followed by the your new name to change it\n");
                         StringBuilder s = new StringBuilder();
@@ -311,6 +397,9 @@ public class Player extends Application {
             }
         }
 
+        public boolean receiveTurnStatus() throws IOException {
+            return dataIn.readBoolean();
+        }
         public boolean receiveGameStatus() throws IOException {
             return dataIn.readBoolean();
         }
@@ -335,6 +424,129 @@ public class Player extends Application {
                 System.out.println("IOException at receiver closeConnection()");
             }
         }
+    }
+
+    public static void newTurn(){
+        handLimit = 5;
+        numActions = 1;
+        numBuys = 1;
+        handPurchasePower = 0;
+        amountSpentThisTurn = 0;
+        bonusPurchasePower = 0;
+        drawHand();
+    }
+    public static int getNumBuys(){
+        return numBuys;
+    }
+    public static int getNumActions() {
+        return numActions;
+    }
+    public static boolean buyCard(Card card, List<Card> cardStack){
+        if(getHandPurchasePower()>=card.getCost()){
+            discardPile.add(card);
+            cardStack.remove(0);
+            numBuys--;
+            amountSpentThisTurn+=card.getCost();
+            return true;
+        }
+        else{
+            System.out.println("You don't have enough coins");
+            return false;
+        }
+    }
+    public static void performAction(ActionCard actionCard){
+        Scanner input = new Scanner(actionCard.getAction());
+        String extractedString;
+        int numAdds = 0;
+
+        while(input.hasNext()){
+            extractedString = input.next();
+            if(extractedString.contains("+")){
+                numAdds = Integer.parseInt(extractedString.substring(extractedString.indexOf("+")+1,extractedString.indexOf("+")+2));
+            }
+            else if(extractedString.contains("Card")){
+                handLimit+=numAdds;
+                for(int i=0;i<numAdds;i++){
+                    drawCardFromDeck();
+                }
+            }
+            else if(extractedString.contains("Action")){
+                numActions+=numAdds;
+            }
+            else if(extractedString.contains("Buy")){
+                numBuys+=numAdds;
+            }
+            else if(extractedString.contains("Coin")){
+                bonusPurchasePower+=numAdds;
+            }
+        }
+        discardPile.add(actionCard);
+        hand.remove(actionCard);
+        numActions--;
+    }
+    public static int getHandPurchasePower(){
+        handPurchasePower = 0;
+        for(Card card: hand){
+            handPurchasePower+=card.getPurchasePower();
+        }
+        handPurchasePower-=amountSpentThisTurn;
+        handPurchasePower+=bonusPurchasePower;
+        return handPurchasePower;
+    }
+    public static List<Card> getHand() {
+        return hand;
+    }
+    public static boolean drawCardFromDeck(){
+        if(deck.size()==0){
+            discardPileToDeck();
+            shuffleDeck();
+        }
+        if(hand.size()>=handLimit){
+            System.out.println("You already have a full hand");
+            return false;
+        }
+        else if(deck.size()==0) {
+            System.out.println("You have no more cards");
+            return false;
+        }
+        else{
+            hand.add(deck.get(0));
+            deck.remove(0);
+            return true;
+        }
+    }
+    public static void discardPileToDeck(){
+        while(discardPile.size()>0) {
+            deck.add(discardPile.get(0));
+            discardPile.remove(0);
+        }
+    }
+    public static void drawHand(){
+        for(int i=0;i<handLimit;i++){
+            if(!drawCardFromDeck()) break;
+        }
+    }
+    public static void shuffleDeck(){
+        Collections.shuffle(deck);
+    }
+    public static void discardHand(){
+        while(hand.size()>0) {
+            discardPile.add(hand.get(0));
+            hand.remove(0);
+        }
+    }
+    public static int getTotalPoints() {
+        int points = 0;
+        for (Card card : discardPile) {
+            points += card.getVictoryPoints();
+        }
+        for (Card card : deck) {
+            points += card.getVictoryPoints();
+        }
+        for (Card card : hand) {
+            points += card.getVictoryPoints();
+        }
+        return points;
     }
 
 }
