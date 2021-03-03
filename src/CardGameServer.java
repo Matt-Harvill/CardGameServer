@@ -27,8 +27,7 @@ public class CardGameServer {
     }
 
     private static List<List<Card>> cardSupply;
-    private static List<Card> allCards;
-    private static List<Card> cardsInGame;
+    private static List<Card> allCards, cardsInGame;
     private static boolean gameOver;
 
     public CardGameServer() {
@@ -165,10 +164,8 @@ public class CardGameServer {
     private static ServerSocket serverSocket;
     private static List<Player> listOfPlayers;
     private static int numPlayers;
-    private static String messageSent;
+    private static String messageSent, playerCompletingTurn, currentPlayerName;
     private static Instruction nextInstruction;
-    private static String currentPlayerName;
-    private static String playerCompletingTurn;
     private static ReentrantLock lock = new ReentrantLock();
 
     private class Player implements Runnable {
