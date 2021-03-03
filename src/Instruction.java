@@ -1,0 +1,3 @@
+public enum Instruction {
+    NAME,MESSAGE,LEAVE,BEGINCHAT,DEALCARDS
+}

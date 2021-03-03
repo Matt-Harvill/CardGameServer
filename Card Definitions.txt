@@ -1,0 +1,17 @@
+(Name, Cost, PurchasePower, VictoryPoints, Action)
+Copper 0 1 0
+Silver 3 2 0
+Gold 6 3 0
+Platinum 9 5 0
+Estate 2 0 1
+Duchy 5 0 3
+Province 8 0 6
+Colony 11 0 10
+
+Action Cards
+Village 3 0 0        +1 Card +2 Actions
+Woodcutter 3 0 0     +1 Buy +2 Coins
+Smithy 4 0 0         +3 Cards
+Festival 5 0 0       +2 Actions +1 Buy +2 Coins
+Laboratory 5 0 0     +2 Cards +1 Action
+Market 5 0 0         +1 Card +1 Action +1 Buy +1 Coin
