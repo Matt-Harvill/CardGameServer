@@ -166,7 +166,7 @@ public class CardGameServer {
     private static int numPlayers;
     private static String messageSent, playerCompletingTurn, currentPlayerName, cardForPurchaseName;
     private static Instruction nextInstruction;
-    private static ReentrantLock lock = new ReentrantLock();
+    private static final ReentrantLock lock = new ReentrantLock();
     private static Card cardForPurchase;
     private static boolean cardSuccessfullyBought = false;
 
@@ -330,6 +330,9 @@ public class CardGameServer {
                             }
                             messageSent = (playerName + " has completed their turn");
                             myTurn = false;
+                        } else if(nextInstruction==Instruction.ACTION){
+                            String actionCardName = receiveMessage();
+                            messageSent = (playerName + " just played " + actionCardName);
                         }
 
                         checkStacks(cardSupply);

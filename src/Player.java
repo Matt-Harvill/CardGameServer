@@ -1,5 +1,4 @@
 import javafx.application.Application;
-import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -30,13 +29,11 @@ public class Player extends Application {
     private static Sender sender;
     private static Receiver receiver;
     private static Socket socket;
-    private static Thread chatSenderThread, gameSenderThread, receiverThread, javaFXThread;
+    private static Thread chatSenderThread, gameSenderThread, receiverThread;
 
     public void start(Stage primaryStage) {
         Pane pane = new Pane();
         stage = primaryStage;
-        javaFXThread = Thread.currentThread();
-        System.out.println("JavaFX Thread: " + Thread.currentThread());
 
         gameArea.setPrefWidth(280);
         gameArea.setPrefHeight(185);
@@ -148,7 +145,6 @@ public class Player extends Application {
     }
     public static void resetGameAreaStrings() {
         gameAreaStrings = new ArrayList<>();
-        System.out.println(gameAreaStrings + " - gameAreaStrings");
     }
 
     public void connectToServer() {
@@ -184,7 +180,6 @@ public class Player extends Application {
             }
 
             public void run() {
-                System.out.println("gameSender thread: " + Thread.currentThread());
                 try {
                     while (!gameAreaDisabled) {
                         if (myTurn) {
@@ -198,16 +193,16 @@ public class Player extends Application {
                                 showGameAreaText();
                                 checkGameField();
                                 if (gameString.equals("yes")) {
-                                    System.out.println(gameString + " " + Thread.currentThread());
                                     gameAreaStrings.add("What card do you want to play?\n");
                                     showGameAreaText();
                                     checkGameField();
-                                    System.out.println(gameTyped + " " + Thread.currentThread());
                                     for (Card card : getHand()) {
                                         if (card.getCardName().equals(gameString)) {
                                             if (card.isActionCard()) {
                                                 performAction((ActionCard) card);
                                                 cardWasPlayed = true;
+                                                sendNextInstruction(Instruction.ACTION);
+                                                sendMessage(card.getCardName());
                                                 gameAreaStrings.add("Action successfully performed\n");
                                                 showGameAreaText();
                                             }
@@ -289,7 +284,6 @@ public class Player extends Application {
             }
 
             public void run() {
-                System.out.println("chatSender thread: " + Thread.currentThread());
                 try {
                     sendNextInstruction(Instruction.DEALCARDS);
                     sendNextInstruction(Instruction.BEGINCHAT);
@@ -338,7 +332,8 @@ public class Player extends Application {
             dataOut.flush();
         }
         public void closeConnection() {
-            System.out.println("Chat connection closed in Sender");
+            gameSenderThread.stop();
+            System.out.println("Chat connection closed in Sender- gameSender ended as well");
         }
     }
 
@@ -375,7 +370,6 @@ public class Player extends Application {
                         setChatArea();
                     } else if (nextInstruction == Instruction.DEALCARDS) {
                         deck = receiveDeck();
-                        System.out.println(deck);
                     } else if (nextInstruction==Instruction.BUY){
                         chatString = (receiveMessage());
                         chatAreaStrings.add(chatString + "\n");
@@ -390,6 +384,10 @@ public class Player extends Application {
                         }
                     } else if (nextInstruction == Instruction.ENDTURN) {
                         chatString = receiveMessage();
+                        chatAreaStrings.add(chatString + "\n");
+                        setChatArea();
+                    } else if (nextInstruction==Instruction.ACTION){
+                        chatString = (receiveMessage());
                         chatAreaStrings.add(chatString + "\n");
                         setChatArea();
                     }
@@ -569,17 +567,5 @@ public class Player extends Application {
         numBuys--;
         amountSpentThisTurn+=card.getCost();
     }
-//    if(fo){
-//        discardPile.add(card);
-//        cardStack.remove(0);
-//        numBuys--;
-//        amountSpentThisTurn+=card.getCost();
-//        return true;
-//    }
-//        else{
-//        System.out.println("You don't have enough coins");
-//        return false;
-//    }
-//}
 
 }
