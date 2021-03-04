@@ -96,8 +96,10 @@ public class Player extends Application {
 
     private static List<Card> hand, deck, discardPile;
     private static int handLimit, numActions, numBuys, handPurchasePower, amountSpentThisTurn, bonusPurchasePower;
-    private static boolean gameOver, myTurn, gameAreaDisabled;
+    private static boolean gameOver, myTurn, gameAreaDisabled, cardSuccessfullyPurchased;
     private static Phase phase;
+    private static Object syncBuyObject;
+    private static Card cardPurchased;
 
     public Player(String name) {
         gameArea = new TextArea();
@@ -127,6 +129,8 @@ public class Player extends Application {
         myTurn = false;
         gameAreaDisabled = false;
         phase = Phase.ACTION;
+        syncBuyObject = new Object();
+        cardSuccessfullyPurchased = false;
     }
 
     public static void gameOverStuff() {
@@ -184,6 +188,7 @@ public class Player extends Application {
                 try {
                     while (!gameAreaDisabled) {
                         if (myTurn) {
+                            shuffleDeck();
                             newTurn();
                             resetGameAreaStrings();
                             boolean cardWasPlayed = false;
@@ -215,41 +220,47 @@ public class Player extends Application {
                                     }
                                     cardWasPlayed = false;
                                 } else {
-                                    myTurn = false;
-//                                    Platform.runLater(() -> resetGameAreaStrings());
-                                    resetGameAreaStrings();
-                                    gameAreaStrings.add("It is not your turn\n");
-                                    showGameAreaText();
                                     break;
                                 }
                             }
-/*
-                            boolean cardWasPurchased;
+
+                            resetGameAreaStrings();
+                            showGameAreaText();
                             while (getNumBuys() > 0) {
-                                cardWasPurchased = false;
-                                System.out.println("You have " + getHandPurchasePower() + " coins to spend");
-                                System.out.println("You have " + getNumBuys() + " buy(s) remaining this turn");
-                                System.out.println("Would you like to buy a card?");
-                                if (true) {
-                                    System.out.println("What card do you want?");
-//                            for (List<Card> list : cardSupply) {
-//                                if (list.size()!=0 && list.get(0).getCardName().equals(scannerInput)) {
-//                                    if(buyCard(list.get(0),list)){
-//                                        cardWasPurchased = true;
-//                                        System.out.println("Purchase successful\n");
-//                                    }
-//                                    break;
-//                                }
-//                            }
-                                    if (!cardWasPurchased) {
-                                        System.out.println("Purchase failed, try again\n");
+                                gameAreaStrings.add("You have " + getHandPurchasePower()+" coins to spend\n" +
+                                        "You have "+getNumBuys()+" buy(s) remaining this turn\nWould you like to buy a card?\n");
+                                showGameAreaText();
+                                checkGameField();
+                                if (gameString.equals("yes")) {
+                                    gameAreaStrings.add("What card do you want?\n");
+                                    showGameAreaText();
+                                    checkGameField();
+
+                                    sendNextInstruction(Instruction.BUY);
+                                    sendMessage(gameString); //name of Card player wants to purchase
+                                    sendPurchasePower();
+
+                                    synchronized (syncBuyObject) {
+                                        syncBuyObject.wait();
                                     }
-                                } else {
-                                    break;
+                                    if(cardSuccessfullyPurchased){
+                                        completeTransaction(cardPurchased);
+                                        gameAreaStrings.add(cardPurchased.getCardName() + " successfully purchased\n");
+                                    } else {
+                                        gameAreaStrings.add("Purchase failed, try again\n");
+                                    }
+                                    showGameAreaText();
+                                    cardSuccessfullyPurchased = false;
                                 }
-                            }*/
+                            }
                             discardHand();
-                        } else Thread.sleep(50);
+                        } else {
+                            myTurn = false;
+                            resetGameAreaStrings();
+                            gameAreaStrings.add("It is not your turn\n");
+                            showGameAreaText();
+                            Thread.sleep(50);
+                        }
                     }
                     gameArea.setText(null);
                 } catch (InterruptedException | IOException ex) {
@@ -310,6 +321,10 @@ public class Player extends Application {
             }
         }
 
+        public void sendPurchasePower() throws IOException {
+            dataOut.writeInt(getHandPurchasePower());
+            dataOut.flush();
+        }
         public void sendMessage(String s) throws IOException {
             dataOut.writeUTF(s);
             dataOut.flush();
@@ -377,6 +392,23 @@ public class Player extends Application {
                     } else if (nextInstruction == Instruction.DEALCARDS) {
                         deck = receiveDeck();
                         System.out.println(deck);
+                    } else if (nextInstruction==Instruction.BUY){
+                        chatString = (receiveMessage());
+                        chatAreaStrings.add(chatString + "\n");
+                        StringBuilder s = new StringBuilder();
+                        if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
+                        for (String string : chatAreaStrings) {
+                            s.append(string);
+                        }
+                        chatArea.setText(s.toString());
+
+                        cardSuccessfullyPurchased = receiveCardPurchased();
+                        if(cardSuccessfullyPurchased){
+                            cardPurchased = receiveCard();
+                        }
+                        synchronized (syncBuyObject){
+                            syncBuyObject.notify();
+                        }
                     }
 
                     if(!name.equals(actionPlayerName)) {
@@ -402,6 +434,12 @@ public class Player extends Application {
             }
         }
 
+        public Card receiveCard() throws IOException, ClassNotFoundException {
+            return (Card)dataIn.readObject();
+        }
+        public boolean receiveCardPurchased() throws IOException {
+            return dataIn.readBoolean();
+        }
         public boolean receiveTurnStatus() throws IOException {
             return dataIn.readBoolean();
         }
@@ -445,19 +483,6 @@ public class Player extends Application {
     }
     public static int getNumActions() {
         return numActions;
-    }
-    public static boolean buyCard(Card card, List<Card> cardStack){
-        if(getHandPurchasePower()>=card.getCost()){
-            discardPile.add(card);
-            cardStack.remove(0);
-            numBuys--;
-            amountSpentThisTurn+=card.getCost();
-            return true;
-        }
-        else{
-            System.out.println("You don't have enough coins");
-            return false;
-        }
     }
     public static void performAction(ActionCard actionCard){
         Scanner input = new Scanner(actionCard.getAction());
@@ -553,5 +578,22 @@ public class Player extends Application {
         }
         return points;
     }
+    public static void completeTransaction(Card card) {
+        discardPile.add(card);
+        numBuys--;
+        amountSpentThisTurn+=card.getCost();
+    }
+//    if(fo){
+//        discardPile.add(card);
+//        cardStack.remove(0);
+//        numBuys--;
+//        amountSpentThisTurn+=card.getCost();
+//        return true;
+//    }
+//        else{
+//        System.out.println("You don't have enough coins");
+//        return false;
+//    }
+//}
 
 }

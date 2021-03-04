@@ -65,7 +65,7 @@ public class CardGameServer {
             else if (list.get(0).getCardName().equals("Colony")) colony = true;
             else if (list.get(0).getCardName().equals("Province")) province = true;
         }
-        if ((cardsInGame.size() - 2) < cardSupply.size()) lessThan3Gone = true;
+        if ((cardsInGame.size() - 3) < cardSupply.size()) lessThan3Gone = true;
         gameOver = !(colony && province && lessThan3Gone);
 //        System.out.println(cardSupply);
     }
@@ -164,9 +164,11 @@ public class CardGameServer {
     private static ServerSocket serverSocket;
     private static List<Player> listOfPlayers;
     private static int numPlayers;
-    private static String messageSent, playerCompletingTurn, currentPlayerName;
+    private static String messageSent, playerCompletingTurn, currentPlayerName, cardForPurchaseName;
     private static Instruction nextInstruction;
     private static ReentrantLock lock = new ReentrantLock();
+    private static Card cardForPurchase;
+    private static boolean cardSuccessfullyBought = false;
 
     private class Player implements Runnable {
 
@@ -180,6 +182,7 @@ public class CardGameServer {
         private Card sentCard;
         private List<Card> initialDeck;
         private boolean myTurn;
+        private int purchasePower;
 
         public Player(Socket s) {
             displayJoinedGame = false;
@@ -213,11 +216,23 @@ public class CardGameServer {
                 } else {
                     sendMessage(messageSent);
                 }
+                if(nextInstruction==Instruction.BUY) {
+                    sendBoolean(cardSuccessfullyBought);
+                    if(cardSuccessfullyBought) sendCardPurchased();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
 
+        public void sendCardPurchased() throws IOException {
+            dataOut.writeObject(cardForPurchase);
+            dataOut.flush();
+        }
+        public void sendBoolean(boolean b) throws IOException {
+            dataOut.writeBoolean(b);
+            dataOut.flush();
+        }
         public void sendTurnStatus() throws IOException {
             dataOut.writeBoolean(myTurn);
             dataOut.flush();
@@ -241,6 +256,18 @@ public class CardGameServer {
         public void sendNextInstruction(Instruction instruction) throws IOException {
             dataOut.writeObject(instruction);
             dataOut.flush();
+        }
+        public boolean buyCard(String cardName) {
+            for (List<Card> cardStack : cardSupply) {
+                if (cardStack.size() > 0) {
+                    if (cardStack.get(0).getCardName().equals(cardName) && (purchasePower >= cardStack.get(0).getCost())) {
+                        cardForPurchase = cardStack.get(0);
+                        cardStack.remove(0);
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         public void run() {
@@ -281,6 +308,15 @@ public class CardGameServer {
                             initialDeal(initialDeck,cardSupply);
                             sendData();
                             continue;
+                        } else if (nextInstruction==Instruction.BUY) {
+                            cardForPurchaseName = receiveMessage();
+                            purchasePower = receivePurchasePower();
+                            cardSuccessfullyBought = buyCard(cardForPurchaseName);
+                            if(cardSuccessfullyBought){
+                                messageSent = (playerName + " just purchased " + cardForPurchaseName);
+                            } else {
+                                messageSent = (playerName + " failed to purchase " + cardForPurchaseName);
+                            }
                         }
 
                         checkStacks(cardSupply);
@@ -301,6 +337,9 @@ public class CardGameServer {
             }
         }
 
+        public int receivePurchasePower() throws IOException {
+            return dataIn.readInt();
+        }
         public String receiveMessage() throws IOException {
             return dataIn.readUTF();
         }
