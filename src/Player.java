@@ -251,22 +251,26 @@ public class Player extends Application {
                                     }
                                     showGameAreaText();
                                     cardSuccessfullyPurchased = false;
+                                } else {
+                                    break;
                                 }
                             }
                             discardHand();
-                        } else {
-                            myTurn = false;
-                            resetGameAreaStrings();
-                            gameAreaStrings.add("It is not your turn\n");
-                            showGameAreaText();
-                            Thread.sleep(50);
+                            sendNextInstruction(Instruction.ENDTURN);
                         }
+                        myTurn = false;
+                        resetGameAreaStrings();
+                        gameAreaStrings.add("It is not your turn\n");
+                        showGameAreaText();
+                        if(gameOver) gameOverStuff();
+                        Thread.sleep(50);
                     }
                     gameArea.setText(null);
                 } catch (InterruptedException | IOException ex) {
                     System.out.println("IOException at gameSender run()");
                 }
             }
+
             public void checkGameField() throws InterruptedException, IOException {
                 while (!gameTyped) {
                     if (gameOver && !gameAreaDisabled) {
@@ -364,43 +368,18 @@ public class Player extends Application {
                     if (nextInstruction == Instruction.MESSAGE || nextInstruction == Instruction.NAME) {
                         chatString = (receiveMessage());
                         chatAreaStrings.add(chatString + "\n");
-                        StringBuilder s = new StringBuilder();
-                        if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
-                        for (String string : chatAreaStrings) {
-                            s.append(string);
-                        }
-                        chatArea.setText(s.toString());
-                    }
-                    else if (nextInstruction == Instruction.GAMEMESSAGE /*|| nextInstruction == Instruction.GAMENAME*/) {
-                        gameString = (receiveMessage());
-//                        gameAreaStrings.add(gameString + "\n");
-//                        String s = "";
-//                        if (gameAreaStrings.size() > 7) gameAreaStrings.remove(0);
-//                        for (String string : gameAreaStrings) {
-//                            s += string;
-//                        }
-//                        gameArea.setText(s);
+                        setChatArea();
                     }
                     else if (nextInstruction == Instruction.BEGINCHAT){
                         chatAreaStrings.add("-----This is the Chat-----\ntype \"leave\" to exit the chat\ntype \"CN - \" followed by the your new name to change it\n");
-                        StringBuilder s = new StringBuilder();
-                        if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
-                        for (String string : chatAreaStrings) {
-                            s.append(string);
-                        }
-                        chatArea.setText(s.toString());
+                        setChatArea();
                     } else if (nextInstruction == Instruction.DEALCARDS) {
                         deck = receiveDeck();
                         System.out.println(deck);
                     } else if (nextInstruction==Instruction.BUY){
                         chatString = (receiveMessage());
                         chatAreaStrings.add(chatString + "\n");
-                        StringBuilder s = new StringBuilder();
-                        if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
-                        for (String string : chatAreaStrings) {
-                            s.append(string);
-                        }
-                        chatArea.setText(s.toString());
+                        setChatArea();
 
                         cardSuccessfullyPurchased = receiveCardPurchased();
                         if(cardSuccessfullyPurchased){
@@ -409,18 +388,17 @@ public class Player extends Application {
                         synchronized (syncBuyObject){
                             syncBuyObject.notify();
                         }
+                    } else if (nextInstruction == Instruction.ENDTURN) {
+                        chatString = receiveMessage();
+                        chatAreaStrings.add(chatString + "\n");
+                        setChatArea();
                     }
 
                     if(!name.equals(actionPlayerName)) {
                         if (nextInstruction==Instruction.LEAVE){
                             chatString = (receiveMessage());
                             chatAreaStrings.add(chatString + "\n");
-                            StringBuilder s = new StringBuilder();
-                            if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
-                            for (String string : chatAreaStrings) {
-                                s.append(string);
-                            }
-                            chatArea.setText(s.toString());
+                            setChatArea();
                         }
                     }
                     if(name.equals(actionPlayerName) && nextInstruction==Instruction.LEAVE) {
@@ -434,6 +412,14 @@ public class Player extends Application {
             }
         }
 
+        public void setChatArea() {
+            StringBuilder s = new StringBuilder();
+            if (chatAreaStrings.size() > 4) chatAreaStrings.remove(0);
+            for (String string : chatAreaStrings) {
+                s.append(string);
+            }
+            chatArea.setText(s.toString());
+        }
         public Card receiveCard() throws IOException, ClassNotFoundException {
             return (Card)dataIn.readObject();
         }

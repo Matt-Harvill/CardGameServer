@@ -317,6 +317,19 @@ public class CardGameServer {
                             } else {
                                 messageSent = (playerName + " failed to purchase " + cardForPurchaseName);
                             }
+                        } else if(nextInstruction==Instruction.ENDTURN) {
+                            for (int i=0; i< listOfPlayers.size(); i++) {
+                                if(listOfPlayers.get(i).equals(player)){
+                                    if(i==listOfPlayers.size()-1){
+                                        listOfPlayers.get(0).myTurn = true;
+                                    } else {
+                                        listOfPlayers.get(i+1).myTurn = true;
+                                    }
+                                    break;
+                                }
+                            }
+                            messageSent = (playerName + " has completed their turn");
+                            myTurn = false;
                         }
 
                         checkStacks(cardSupply);
