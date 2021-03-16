@@ -11,6 +11,9 @@ import java.util.*;
 public class Player extends Application {
 
     public static void main(String[] args) {
+
+        System.out.println("Testing a remote git push");
+
         Scanner scanner = new Scanner(System.in);
         System.out.println("What is your name?");
         Player player = new Player(scanner.nextLine());
